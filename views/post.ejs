@@ -1,0 +1,24 @@
+<%- include('partials/header') %>
+
+    <article class="full-post">
+        <h2><%= post.title %></h2>
+        <p class="post-meta"><i class="far fa-calendar"></i> Posted on <%= post.createdAt.toDateString() %></p>
+        
+        <div class="post-image">
+            <img src="/images/<%= post.image || 'default.jpg' %>" alt="<%= post.title %>">
+        </div>
+        
+        <div class="post-content">
+            <%- post.content.replace(/\n/g, '<br>') %>
+        </div>
+        
+        <div class="post-actions">
+            <a href="/" class="btn secondary"><i class="fas fa-arrow-left"></i> Back to Home</a>
+            <a href="/posts/<%= post.id %>/edit" class="btn primary"><i class="fas fa-edit"></i> Edit Post</a>
+            <form action="/posts/<%= post.id %>?_method=DELETE" method="POST" class="delete-form">
+                <button type="submit" class="btn danger"><i class="fas fa-trash"></i> Delete Post</button>
+            </form>
+        </div>
+    </article>
+
+<%- include('partials/footer') %>

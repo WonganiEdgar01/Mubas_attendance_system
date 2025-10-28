@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MUBAS | Live Session Tracking</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase-auth.js"></script>
+    <link rel="stylesheet" href="style/participants.css">
+    <style>
+        /* Additional styles for the simplified UI */
+        .session-control {
+            margin-bottom: 20px;
+        }
+        
+        .control-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        /* Status indicators */
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        
+        .status-active {
+            background-color: #39ffa3;
+            box-shadow: 0 0 10px #39ffa3;
+        }
+        
+        .status-inactive {
+            background-color: #ff3939;
+            box-shadow: 0 0 10px #ff3939;
+        }
+        
+        .status-scheduled {
+            background-color: #ffde39;
+            box-shadow: 0 0 10px #ffde39;
+        }
+        
+        /* Status badges */
+        .status.attended {
+            background-color: #39ffa3;
+            color: #000;
+        }
+        
+        .status.exited {
+            background-color: #ffde39;
+            color: #000;
+        }
+        
+        .status.absent {
+            background-color: #ff3939;
+            color: #fff;
+        }
+        
+        .scanner-icon {
+            font-size: 16px;
+            margin-right: 5px;
+        }
+        
+        .fingerprint-icon {
+            color: #39ffa3;
+        }
+        
+        .barcode-icon {
+            color: #ffde39;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="logo">
+            <h1><i class="image"><img src="mubas-logo-full.png"></i> MUBAS-<span>ATTEND</span></h1>
+        </div>
+        <ul class="nav-links">
+            <li><a href="index.php"><i class="fas fa-home"></i> <span>Dashboard</span></a></li>
+            <li><a href="session.php"><i class="fas fa-calendar-alt"></i> <span>Sessions</span></a></li>
+            <li><a href="participants.php" class="active"><i class="fas fa-users"></i> <span>Participants</span></a></li>
+            <li><a href="register.php"><i class="fas fa-user"></i> <span>Registration</span></a></li>
+            <li><a href="reporty.php"><i class="fas fa-chart-bar"></i> <span>Reports</span></a></li>
+            <li><a href="logout.php"><i class="fas fa-sign-out-alt"></i> <span>Logout</span></a></li>
+        </ul>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Header -->
+        <div class="header">
+            <h2><i class="fas fa-users"></i> Live Session Tracking</h2>
+            <div class="user-menu">
+                <div class="notification">
+                    <i class="fas fa-bell"></i>
+                    <span class="badge">3</span>
+                </div>
+                <div class="image">
+                    <img src="img/image.png" alt="User">
+                    <div>
+                        <h4 id="userName">Loading...</h4>
+                        <p id="userDepartment">Loading...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Session Control -->
+        <div class="session-control">
+            <h3 class="control-title"><i class="fas fa-play-circle"></i> Session Control</h3>
+            
+            <div class="control-grid">
+                <div class="form-group">
+                    <label for="sessionSelect">Select Session</label>
+                    <select id="sessionSelect">
+                        <option value="">-- Select Session --</option>
+                        <!-- Sessions will be populated from Supabase -->
+                    </select>
+                </div>
+            </div>
+            
+            <div class="action-buttons">
+                <button class="btn btn-success" id="startSessionBtn">
+                    <i class="fas fa-play"></i> Start Session
+                </button>
+                <button class="btn btn-danger" id="stopSessionBtn" disabled>
+                    <i class="fas fa-stop"></i> End Session
+                </button>
+                <button class="btn btn-outline" id="refreshBtn">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+            
+            <div class="session-status">
+                <div class="status-indicator status-inactive" id="statusIndicator"></div>
+                <div class="status-text" id="statusText">No active session. Please start a session to track attendance.</div>
+                <div class="session-info" id="sessionInfo"></div>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="stats-cards">
+            <div class="stat-card stat-1">
+                <div class="stat-icon">
+                    <i class="fas fa-user-check"></i>
+                </div>
+                <div class="stat-value" id="totalPresent">0</div>
+                <div class="stat-label">Present Students</div>
+            </div>
+            
+            <div class="stat-card stat-2">
+                <div class="stat-icon">
+                    <i class="fas fa-door-open"></i>
+                </div>
+                <div class="stat-value" id="totalExited">0</div>
+                <div class="stat-label">Exited Students</div>
+            </div>
+            
+            <div class="stat-card stat-3">
+                <div class="stat-icon">
+                    <i class="fas fa-user-times"></i>
+                </div>
+                <div class="stat-value" id="totalAbsent">0</div>
+                <div class="stat-label">Absent Students</div>
+            </div>
+            
+            <div class="stat-card stat-4">
+                <div class="stat-icon">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div class="stat-value" id="attendanceRate">0%</div>
+                <div class="stat-label">Attendance Rate</div>
+            </div>
+        </div>
+
+        <!-- Participants Table -->
+        <h3 class="section-title"><i class="fas fa-list-ol"></i> Live Attendance</h3>
+        
+        <div class="participants-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Student ID</th>
+                        <th>Name</th>
+                        <th>Program</th>
+                        <th>Entry Time</th>
+                        <th>Exit Time</th>
+                        <th>Authentication</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="participantsTableBody">
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 30px; color: var(--gray);">
+                            <i class="fas fa-users" style="font-size: 40px; margin-bottom: 15px; display: block;"></i>
+                            No active session. Start a session to view attendance data.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const sessionSelect = document.getElementById('sessionSelect');
+        const startSessionBtn = document.getElementById('startSessionBtn');
+        const stopSessionBtn = document.getElementById('stopSessionBtn');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        const sessionInfo = document.getElementById('sessionInfo');
+        const participantsTableBody = document.getElementById('participantsTableBody');
+        
+        // Stats elements
+        const totalPresentEl = document.getElementById('totalPresent');
+        const totalExitedEl = document.getElementById('totalExited');
+        const totalAbsentEl = document.getElementById('totalAbsent');
+        const attendanceRateEl = document.getElementById('attendanceRate');
+        
+        // State variables
+        let currentSession = null;
+        let sessionInterval = null;
+        let sessionDuration = 0;
+        let allSessions = [];
+        let allStudents = [];
+        let attendanceData = []; // Real attendance data
+        let scannerIp = '10.35.252.146'; // Default scanner IP
+        let scannerInterval = null; // Scanner monitoring interval
+        let isScanning = false; // Prevent multiple simultaneous scans
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Initialize authentication
+            const isAuthenticated = await SupabaseAuth.initAuth();
+            if (!isAuthenticated) return;
+            
+            // Load sessions and students from Supabase
+            await Promise.all([loadSessions(), loadStudents()]);
+            
+            // Event listeners
+            setupEventListeners();
+            
+            // Show scanner configuration
+            showScannerConfig();
+        });
+        
+        // Setup event listeners
+        function setupEventListeners() {
+            // Start session button
+            startSessionBtn.addEventListener('click', startSession);
+            
+            // Stop session button
+            stopSessionBtn.addEventListener('click', stopSession);
+            
+            // Refresh button
+            refreshBtn.addEventListener('click', refreshAttendance);
+            
+            // Keyboard listener for manual student ID entry
+            document.addEventListener('keypress', handleStudentIdEntry);
+        }
+        
+        // Show scanner configuration dialog
+        function showScannerConfig() {
+            Swal.fire({
+                title: 'Scanner Configuration',
+                html: `
+                    <div style="text-align: left;">
+                        <p>Configure the barcode scanner connection:</p>
+                        <input type="text" id="scannerIpInput" class="swal2-input" placeholder="Scanner IP Address" value="${scannerIp}">
+                        <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                            Enter the IP address of the PC running the Flask scanner API (default: 10.35.252.146)
+                        </p>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Save Configuration',
+                cancelButtonText: 'Use Default',
+                preConfirm: () => {
+                    const ip = document.getElementById('scannerIpInput').value.trim();
+                    if (ip) {
+                        scannerIp = ip;
+                        return ip;
+                    }
+                    return scannerIp;
+                }
+            }).then((result) => {
+                if (result.isConfirmed || result.dismiss === Swal.DismissReason.cancel) {
+                    console.log(`Scanner IP configured: ${scannerIp}`);
+                }
+            });
+        }
+        
+        // Load sessions from Supabase
+        async function loadSessions() {
+            try {
+                const userData = SupabaseAuth.getCurrentUser();
+                if (!userData) return;
+                
+                // Fetch only scheduled sessions from Supabase
+                const { data: sessions, error } = await SupabaseAuth.supabase
+                    .from('sessions')
+                    .select('*')
+                    .eq('lecturer_id', userData.id)
+                    .eq('status', 'scheduled')
+                    .order('start_time', { ascending: false });
+                
+                if (error) throw error;
+                
+                allSessions = sessions || [];
+                
+                // Populate session dropdown
+                sessionSelect.innerHTML = '<option value="">-- Select Session --</option>';
+                
+                allSessions.forEach(session => {
+                    const startDate = session.start_time ? new Date(session.start_time) : null;
+                    const labelDate = startDate ? startDate.toLocaleString([], { 
+                        month: 'short', 
+                        day: '2-digit', 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    }) : '';
+                    
+                    const option = document.createElement('option');
+                    option.value = session.session_id;
+                    option.textContent = `${session.course} - ${session.session_title}${labelDate ? ' - ' + labelDate : ''}`;
+                    option.dataset.session = JSON.stringify(session);
+                    sessionSelect.appendChild(option);
+                });
+                
+            } catch (e) {
+                console.error('Failed to load sessions:', e);
+                sessionSelect.innerHTML = '<option value="">-- Select Session --</option>';
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Failed to load sessions',
+                    text: e.message || 'Database error',
+                    timer: 4000
+                });
+            }
+        }
+        
+        // Load all students from Supabase
+        async function loadStudents() {
+            try {
+                const userData = SupabaseAuth.getCurrentUser();
+                if (!userData) return;
+                
+                // Fetch all students from Supabase
+                const { data: students, error } = await SupabaseAuth.supabase
+                    .from('students')
+                    .select('*')
+                    .order('student_id', { ascending: true });
+                
+                if (error) throw error;
+                
+                allStudents = students || [];
+                console.log(`Loaded ${allStudents.length} students from database`);
+                
+            } catch (e) {
+                console.error('Failed to load students:', e);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Failed to load students',
+                    text: e.message || 'Database error',
+                    timer: 4000
+                });
+            }
+        }
+        
+        // Start a new session
+        async function startSession() {
+            const sessionId = sessionSelect.value;
+            
+            if (!sessionId) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Missing Information',
+                    text: 'Please select a session to start.',
+                    timer: 3000
+                });
+                return;
+            }
+            
+            // Get the selected session data
+            const selectedOption = sessionSelect.options[sessionSelect.selectedIndex];
+            const session = JSON.parse(selectedOption.dataset.session);
+            
+            // Check if session can be started
+            if (session.status !== 'scheduled') {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Cannot Start Session',
+                    text: 'Only scheduled sessions can be started.',
+                    timer: 3000
+                });
+                return;
+            }
+            
+            Swal.fire({
+                title: 'Start Session?',
+                html: `
+                    <p>Are you sure you want to start:</p>
+                    <p><b>${session.course} - ${session.session_title}</b></p>
+                    <hr>
+                    <p><strong>Scanner IP:</strong> ${scannerIp}</p>
+                    <p><strong>Students:</strong> ${allStudents.length}</p>
+                `,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, Start Session',
+                cancelButtonText: 'Cancel'
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    try {
+                        const userData = SupabaseAuth.getCurrentUser();
+                        if (!userData) {
+                            throw new Error('Please log in again.');
+                        }
+                        
+                        // Update the session status to 'active' in the database
+                        const { error } = await SupabaseAuth.supabase
+                            .from('sessions')
+                            .update({ 
+                                status: 'active',
+                                updated_at: new Date().toISOString()
+                            })
+                            .eq('session_id', sessionId)
+                            .eq('lecturer_id', userData.id);
+                            
+                        if (error) throw error;
+                        
+                        // Calculate session duration in minutes
+                        const startTime = new Date(session.start_time);
+                        const endTime = new Date(session.end_time);
+                        const duration = Math.max(1, Math.floor((endTime - startTime) / 60000));
+                        
+                        currentSession = {
+                            session_id: sessionId,
+                            course: session.course,
+                            title: session.session_title,
+                            startTime: new Date(),
+                            duration: duration
+                        };
+                        
+                        // Initialize attendance data for all students
+                        initializeAttendanceData();
+                        
+                        startSessionUI(currentSession);
+                        
+                        // Start scanner monitoring
+                        startScannerMonitoring();
+                        
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Session Started!',
+                            html: `
+                                <p>Attendance tracking is now active.</p>
+                                <p><strong>Scanner:</strong> ${scannerIp}:5000</p>
+                                <p><strong>Students:</strong> ${allStudents.length}</p>
+                                <p>Students can now scan their IDs to mark attendance.</p>
+                            `,
+                            timer: 4000,
+                            showConfirmButton: false
+                        });
+                        
+                    } catch (e) {
+                        console.error('Session start error:', e);
+                        
+                        let errorMessage = 'An error occurred while starting the session.';
+                        
+                        if (e.message && e.message.includes('Please log in again')) {
+                            errorMessage = 'Please log in again to start sessions.';
+                            window.location.href = 'login.php';
+                            return;
+                        } else if (e.code === '23505') {
+                            errorMessage = 'Session is already active.';
+                        } else if (e.code === '42P01') {
+                            errorMessage = 'Sessions table not found. Please contact administrator.';
+                        } else if (e.code === '42501') {
+                            errorMessage = 'Permission denied. Please contact administrator.';
+                        } else if (e.message) {
+                            errorMessage = `Database error: ${e.message}`;
+                        }
+                        
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Failed to start session',
+                            text: errorMessage,
+                            timer: 5000
+                        });
+                    }
+                }
+            });
+        }
+        
+        // Initialize attendance data for all students
+        function initializeAttendanceData() {
+            attendanceData = allStudents.map(student => ({
+                student_id: student.student_id,
+                full_name: student.full_name,
+                email: student.email,
+                phone: student.phone,
+                program: student.program,
+                year_of_study: student.year_of_study,
+                fingerprint_data: student.fingerprint_data,
+                barcode_data: student.barcode_data,
+                entryTime: null,
+                exitTime: null,
+                status: 'absent',
+                entryMethod: null,
+                exitMethod: null
+            }));
+            
+            updateAttendanceTable(attendanceData);
+            updateStats(0, 0, allStudents.length);
+        }
+        
+        // Stop the current session
+        async function stopSession() {
+            Swal.fire({
+                title: 'End Session?',
+                text: 'Are you sure you want to end the current session? This will create the attendance table.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, End Session',
+                cancelButtonText: 'Cancel'
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    try {
+                        const userData = SupabaseAuth.getCurrentUser();
+                        if (currentSession && userData) {
+                            // Create attendance table and save data
+                            await createAttendanceTable();
+                            
+                            // Update the session status to 'completed' in the database
+                            const { error } = await SupabaseAuth.supabase
+                                .from('sessions')
+                                .update({ 
+                                    status: 'completed',
+                                    updated_at: new Date().toISOString()
+                                })
+                                .eq('session_id', currentSession.session_id)
+                                .eq('lecturer_id', userData.id);
+                                
+                            if (error) throw error;
+                        }
+                    } catch (e) {
+                        console.error('Failed to update session status:', e);
+                        // Continue with UI reset even if database update fails
+                    }
+                    
+                    // Stop scanner monitoring
+                    stopScannerMonitoring();
+                    
+                    // Clear interval
+                    if (sessionInterval) {
+                        clearInterval(sessionInterval);
+                        sessionInterval = null;
+                    }
+                    
+                    // Reset UI
+                    statusIndicator.className = 'status-indicator status-inactive';
+                    statusText.textContent = 'Session ended. Attendance data has been saved.';
+                    sessionInfo.textContent = '';
+                    
+                    // Disable stop button, enable start button
+                    stopSessionBtn.disabled = true;
+                    startSessionBtn.disabled = false;
+                    
+                    // Enable session select
+                    sessionSelect.disabled = false;
+                    
+                    // Reset table
+                    participantsTableBody.innerHTML = `
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 30px; color: var(--gray);">
+                                <i class="fas fa-check-circle" style="font-size: 40px; margin-bottom: 15px; display: block; color: #39ffa3;"></i>
+                                Session ended. Attendance data has been saved to the system.
+                            </td>
+                        </tr>
+                    `;
+                    
+                    // Reload sessions to update the dropdown
+                    await loadSessions();
+                    
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Session Ended!',
+                        text: 'Attendance data has been saved successfully.',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                    
+                    currentSession = null;
+                }
+            });
+        }
+        
+        // Create attendance table and save attendance data
+        async function createAttendanceTable() {
+            try {
+                const userData = SupabaseAuth.getCurrentUser();
+                if (!userData || !currentSession) return;
+                
+                // Create attendance table SQL
+                const createTableSQL = `
+                    CREATE TABLE IF NOT EXISTS attendance_${currentSession.session_id} (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        student_id VARCHAR(50) NOT NULL,
+                        full_name VARCHAR(255) NOT NULL,
+                        email VARCHAR(255) NOT NULL,
+                        phone VARCHAR(20) NOT NULL,
+                        program VARCHAR(20) NOT NULL,
+                        year_of_study INT NOT NULL,
+                        session_id VARCHAR(50) NOT NULL,
+                        course VARCHAR(20) NOT NULL,
+                        entry_time DATETIME NULL,
+                        exit_time DATETIME NULL,
+                        status ENUM('present', 'exited', 'absent') DEFAULT 'absent',
+                        entry_method ENUM('fingerprint', 'barcode') NULL,
+                        exit_method ENUM('fingerprint', 'barcode') NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        INDEX idx_student_id (student_id),
+                        INDEX idx_session_id (session_id),
+                        INDEX idx_status (status)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+                `;
+                
+                // Save attendance data to Supabase (using a generic attendance table)
+                const attendanceRecords = attendanceData.map(record => ({
+                    student_id: record.student_id,
+                    full_name: record.full_name,
+                    email: record.email,
+                    phone: record.phone,
+                    program: record.program,
+                    year_of_study: record.year_of_study,
+                    session_id: currentSession.session_id,
+                    course: currentSession.course,
+                    entry_time: record.entryTime,
+                    exit_time: record.exitTime,
+                    status: record.status,
+                    entry_method: record.entryMethod,
+                    exit_method: record.exitMethod
+                }));
+                
+                // Insert attendance data into Supabase
+                const { error } = await SupabaseAuth.supabase
+                    .from('attendance')
+                    .insert(attendanceRecords);
+                
+                if (error) {
+                    console.error('Failed to save attendance data:', error);
+                    throw error;
+                }
+                
+                console.log(`Attendance data saved for session ${currentSession.session_id}`);
+                
+                // Show success message with SQL
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Attendance Table Created!',
+                    html: `
+                        <p>Attendance data has been saved successfully.</p>
+                        <p><strong>Session:</strong> ${currentSession.title}</p>
+                        <p><strong>Students Present:</strong> ${attendanceData.filter(s => s.status === 'present' || s.status === 'exited').length}</p>
+                        <p><strong>Students Absent:</strong> ${attendanceData.filter(s => s.status === 'absent').length}</p>
+                        <hr>
+                        <p><strong>SQL Command for Attendance Table:</strong></p>
+                        <textarea readonly style="width: 100%; height: 100px; font-family: monospace; font-size: 10px;">${createTableSQL}</textarea>
+                    `,
+                    confirmButtonText: 'OK'
+                });
+                
+            } catch (error) {
+                console.error('Failed to create attendance table:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Failed to Save Attendance',
+                    text: 'An error occurred while saving attendance data.',
+                    timer: 5000
+                });
+            }
+        }
+        
+        // Refresh attendance data
+        function refreshAttendance() {
+            if (!currentSession) {
+                Swal.fire({
+                    icon: 'info',
+                    title: 'No Active Session',
+                    text: 'There is no active session to refresh.',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+                return;
+            }
+            
+            // Update the attendance table with current data
+            updateAttendanceTable(attendanceData);
+            
+            Swal.fire({
+                icon: 'success',
+                title: 'Attendance Updated',
+                text: 'Attendance data has been refreshed.',
+                timer: 1500,
+                showConfirmButton: false
+            });
+        }
+        
+        // Start session UI updates
+        function startSessionUI(session) {
+            // Update UI
+            statusIndicator.className = 'status-indicator status-active';
+            statusText.textContent = `Session Active: ${session.title}`;
+            
+            // Enable stop button, disable start button
+            stopSessionBtn.disabled = false;
+            startSessionBtn.disabled = true;
+            
+            // Disable session select
+            sessionSelect.disabled = true;
+            
+            // Start session timer
+            sessionDuration = 0;
+            updateSessionInfo();
+            
+            if (sessionInterval) clearInterval(sessionInterval);
+            sessionInterval = setInterval(() => {
+                sessionDuration++;
+                updateSessionInfo();
+            }, 1000);
+        }
+        
+        // Update session info display
+        function updateSessionInfo() {
+            const minutes = Math.floor(sessionDuration / 60);
+            const seconds = sessionDuration % 60;
+            
+            if (currentSession) {
+                const remaining = currentSession.duration - minutes;
+                sessionInfo.textContent = `Elapsed: ${minutes}m ${seconds}s | Remaining: ${remaining}m | Scanner: ${scannerIp}`;
+                
+                // Auto-end session when time is up
+                if (remaining <= 0) {
+                    stopSession();
+                }
+            }
+        }
+        
+        // Start scanner monitoring
+        function startScannerMonitoring() {
+            console.log(`Starting scanner monitoring on ${scannerIp}:5000`);
+            
+            // Clear any existing interval
+            if (scannerInterval) {
+                clearInterval(scannerInterval);
+            }
+            
+            // Monitor scanner every 2 seconds
+            scannerInterval = setInterval(async () => {
+                if (currentSession && !isScanning) {
+                    await checkForScannerInput();
+                }
+            }, 2000);
+        }
+        
+        // Stop scanner monitoring
+        function stopScannerMonitoring() {
+            if (scannerInterval) {
+                clearInterval(scannerInterval);
+                scannerInterval = null;
+            }
+            console.log('Scanner monitoring stopped');
+        }
+        
+        // Check for scanner input from Flask API
+        async function checkForScannerInput() {
+            try {
+                isScanning = true;
+                
+                // Make request to Flask API
+                const response = await fetch(`http://${scannerIp}:5000/scan`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    timeout: 1000 // 1 second timeout
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.barcode && data.barcode.trim() !== '') {
+                    console.log(`Scanner detected: ${data.barcode}`);
+                    await processStudentScan(data.barcode, 'barcode');
+                }
+                
+            } catch (error) {
+                // Don't show error for timeout or connection issues during monitoring
+                if (error.name !== 'AbortError' && !error.message.includes('timeout')) {
+                    console.log(`Scanner connection issue: ${error.message}`);
+                }
+            } finally {
+                isScanning = false;
+            }
+        }
+        
+        // Handle student ID entry (manual or scanner)
+        function handleStudentIdEntry(event) {
+            if (!currentSession) return;
+            
+            // Check if it's a student ID pattern (alphanumeric)
+            if (event.key.match(/[a-zA-Z0-9]/)) {
+                // This would be part of a student ID being scanned
+                // In a real implementation, you'd buffer the input until complete
+            }
+        }
+        
+        // Process student ID scan
+        async function processStudentScan(studentId, scanMethod = 'barcode') {
+            if (!currentSession) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'No Active Session',
+                    text: 'Please start a session before scanning student IDs.',
+                    timer: 3000
+                });
+                return;
+            }
+            
+            // Find student in database
+            const student = allStudents.find(s => 
+                s.student_id === studentId || 
+                s.barcode_data === studentId || 
+                s.fingerprint_data === studentId
+            );
+            
+            if (!student) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Student Not Found',
+                    text: `Student ID "${studentId}" not found in the database.`,
+                    timer: 3000
+                });
+                return;
+            }
+            
+            // Find student in attendance data
+            const attendanceRecord = attendanceData.find(a => a.student_id === student.student_id);
+            
+            if (!attendanceRecord) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Attendance Record Not Found',
+                    text: 'Student not found in attendance list.',
+                    timer: 3000
+                });
+                return;
+            }
+            
+            const currentTime = new Date();
+            
+            // Determine action based on current status
+            if (attendanceRecord.status === 'absent') {
+                // Student is entering
+                attendanceRecord.entryTime = currentTime;
+                attendanceRecord.status = 'present';
+                attendanceRecord.entryMethod = scanMethod;
+                
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Student Entered',
+                    html: `
+                        <p><strong>Student:</strong> ${student.full_name}</p>
+                        <p><strong>ID:</strong> ${student.student_id}</p>
+                        <p><strong>Time:</strong> ${currentTime.toLocaleTimeString()}</p>
+                        <p><strong>Method:</strong> ${scanMethod}</p>
+                    `,
+                    timer: 3000,
+                    showConfirmButton: false
+                });
+                
+            } else if (attendanceRecord.status === 'present') {
+                // Student is exiting
+                attendanceRecord.exitTime = currentTime;
+                attendanceRecord.status = 'exited';
+                attendanceRecord.exitMethod = scanMethod;
+                
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Student Exited',
+                    html: `
+                        <p><strong>Student:</strong> ${student.full_name}</p>
+                        <p><strong>ID:</strong> ${student.student_id}</p>
+                        <p><strong>Exit Time:</strong> ${currentTime.toLocaleTimeString()}</p>
+                        <p><strong>Method:</strong> ${scanMethod}</p>
+                    `,
+                    timer: 3000,
+                    showConfirmButton: false
+                });
+                
+            } else if (attendanceRecord.status === 'exited') {
+                // Student is re-entering
+                attendanceRecord.status = 'present';
+                attendanceRecord.entryMethod = scanMethod;
+                
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Student Re-entered',
+                    html: `
+                        <p><strong>Student:</strong> ${student.full_name}</p>
+                        <p><strong>ID:</strong> ${student.student_id}</p>
+                        <p><strong>Time:</strong> ${currentTime.toLocaleTimeString()}</p>
+                        <p><strong>Method:</strong> ${scanMethod}</p>
+                    `,
+                    timer: 3000,
+                    showConfirmButton: false
+                });
+            }
+            
+            // Update the UI
+            updateAttendanceTable(attendanceData);
+            
+            // Update statistics
+            const presentCount = attendanceData.filter(s => s.status === 'present').length;
+            const exitedCount = attendanceData.filter(s => s.status === 'exited').length;
+            const totalCount = attendanceData.length;
+            
+            updateStats(presentCount, exitedCount, totalCount);
+        }
+        
+        // Update attendance table
+        function updateAttendanceTable(data) {
+            if (data.length === 0) {
+                participantsTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 30px; color: var(--gray);">
+                            <i class="fas fa-spinner fa-spin" style="font-size: 40px; margin-bottom: 15px; display: block;"></i>
+                            Waiting for attendance data...
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            participantsTableBody.innerHTML = '';
+            
+            data.forEach(student => {
+                const row = document.createElement('tr');
+                
+                const entryTime = student.entryTime ? 
+                    student.entryTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—';
+                
+                const exitTime = student.exitTime ? 
+                    student.exitTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—';
+                
+                const entryIcon = student.entryMethod === 'fingerprint' ? 
+                    '<i class="fas fa-fingerprint scanner-icon fingerprint-icon" title="Fingerprint Entry"></i>' : 
+                    (student.entryMethod ? '<i class="fas fa-qrcode scanner-icon barcode-icon" title="QR Code Entry"></i>' : '—');
+                
+                const exitIcon = student.exitMethod === 'barcode' ? 
+                    '<i class="fas fa-qrcode scanner-icon barcode-icon" title="QR Code Exit"></i>' : 
+                    (student.exitMethod === 'fingerprint' ? '<i class="fas fa-fingerprint scanner-icon fingerprint-icon" title="Fingerprint Exit"></i>' : '—');
+                
+                row.innerHTML = `
+                    <td>${student.student_id}</td>
+                    <td>${student.full_name}</td>
+                    <td>${student.program}</td>
+                    <td>${entryTime}</td>
+                    <td>${exitTime}</td>
+                    <td>${entryIcon} ${exitIcon}</td>
+                    <td><span class="status ${student.status}">${student.status.charAt(0).toUpperCase() + student.status.slice(1)}</span></td>
+                `;
+                
+                participantsTableBody.appendChild(row);
+            });
+        }
+        
+        // Update statistics
+        function updateStats(present, exited, total) {
+            totalPresentEl.textContent = present;
+            totalExitedEl.textContent = exited;
+            totalAbsentEl.textContent = total - present;
+            attendanceRateEl.textContent = total > 0 ? Math.round((present / total) * 100) + '%' : '0%';
+        }
+        
+        // Function to simulate scanner input (for testing)
+        function simulateScannerInput() {
+            if (!currentSession) return;
+            
+            // Get a random student for testing
+            const randomStudent = allStudents[Math.floor(Math.random() * allStudents.length)];
+            if (randomStudent) {
+                processStudentScan(randomStudent.student_id, 'barcode');
+            }
+        }
+        
+        // Manual student ID entry function
+        function manualStudentEntry() {
+            if (!currentSession) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'No Active Session',
+                    text: 'Please start a session before entering student IDs.',
+                    timer: 3000
+                });
+                return;
+            }
+            
+            Swal.fire({
+                title: 'Enter Student ID',
+                input: 'text',
+                inputPlaceholder: 'Enter student ID or barcode',
+                showCancelButton: true,
+                confirmButtonText: 'Mark Attendance',
+                cancelButtonText: 'Cancel',
+                preConfirm: (studentId) => {
+                    if (!studentId || studentId.trim() === '') {
+                        Swal.showValidationMessage('Please enter a student ID');
+                        return false;
+                    }
+                    return studentId.trim();
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    processStudentScan(result.value, 'manual');
+                }
+            });
+        }
+        
+        // Expose functions for testing and manual use
+        window.processStudentScan = processStudentScan;
+        window.simulateScannerInput = simulateScannerInput;
+        window.manualStudentEntry = manualStudentEntry;
+        window.startScannerMonitoring = startScannerMonitoring;
+        window.stopScannerMonitoring = stopScannerMonitoring;
+    </script>
+</body>
+</html>
